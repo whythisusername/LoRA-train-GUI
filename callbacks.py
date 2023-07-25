@@ -25,6 +25,7 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
                  "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
                  "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
+                 "LoKR", "lokr_dim", "lokr_dim_string", "lokr_alpha", "lokr_alpha_string",
                  "min_snr_gamma", "_offset_noise", "offset_noise", "scale_weight_normals",
                  "_noise_amount", "noise_amount", "_noise_discount", "noise_discount", "noise_iterations", "_noise_iterations"
                  "additional_parameters"]
@@ -267,6 +268,8 @@ def locon(caller):
         dylora(suffix)
         gui.set_value("LoHA" + suffix, False)
         loha(suffix)
+        gui.set_value("LoKR" + suffix, False)
+        lokr(suffix)
     if not gui.get_value("LoCON" + suffix):
         gui.hide_item("locon_dim" + suffix)
         gui.hide_item("locon_alpha" + suffix)
@@ -282,6 +285,8 @@ def loha(caller):
         dylora(suffix)
         gui.set_value("LoCON" + suffix, False)
         locon(suffix)
+        gui.set_value("LoKR" + suffix, False)
+        lokr(suffix)
     if not gui.get_value("LoHA" + suffix):
         gui.hide_item("loha_dim" + suffix)
         gui.hide_item("loha_alpha" + suffix)
@@ -299,6 +304,8 @@ def dylora(caller):
         locon(suffix)
         gui.set_value("LoHA" + suffix, False)
         loha(suffix)
+        gui.set_value("LoKR" + suffix, False)
+        lokr(suffix)
     if not gui.get_value("DyLoRA" + suffix):
         gui.hide_item("dylora_dim" + suffix)
         gui.hide_item("dylora_alpha" + suffix)
@@ -306,6 +313,24 @@ def dylora(caller):
         gui.set_value("dylora_dim_string" + suffix, "")
         gui.set_value("dylora_alpha_string" + suffix, "")
         gui.set_value("dylora_unit_string" + suffix, "")
+
+def lokr(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("LoKR" + suffix):
+        gui.show_item("lokr_dim" + suffix)
+        gui.show_item("lokr_alpha" + suffix)
+        gui.set_value("DyLoRA" + suffix, False)
+        dylora(suffix)
+        gui.set_value("LoCON" + suffix, False)
+        locon(suffix)
+        gui.set_value("LoHA" + suffix, False)
+        loha(suffix)
+        gui.set_value("scale_weight_normals" + suffix, "")
+    if not gui.get_value("LoKR" + suffix):
+        gui.hide_item("lokr_dim" + suffix)
+        gui.hide_item("lokr_alpha" + suffix)
+        gui.set_value("lokr_dim_string" + suffix, "")
+        gui.set_value("lokr_alpha_string" + suffix, "")
 
 def offset_noise(caller):
     suffix = append_caller_instance(caller)
@@ -334,7 +359,7 @@ def offset_noise(caller):
 
 def network_module(caller):
     suffix = append_caller_instance(caller)
-    if gui.get_value('locon_dim_string' + suffix) or gui.get_value('loha_dim_string' + suffix):
+    if gui.get_value('locon_dim_string' + suffix) or gui.get_value('loha_dim_string' + suffix) or gui.get_value('lokr_dim_string' + suffix):
         return f" \"--network_module=lycoris.kohya\" "
     elif gui.get_value('dylora_dim_string' + suffix):
         return f" \"--network_module=networks.dylora\" "
@@ -362,6 +387,12 @@ def additional_network_args(caller):
         all_args += f"\"conv_dim={loha_dim}\" "
         all_args += f"\"conv_alpha={loha_alpha}\" "
         all_args += f"\"algo=loha\" "
+    elif gui.get_value('lokr_dim_string' + suffix):
+        lokr_dim = gui.get_value('lokr_dim_string' + suffix)
+        lokr_alpha = gui.get_value('lokr_alpha_string' + suffix)
+        all_args += f"\"conv_dim={lokr_dim}\" "
+        all_args += f"\"conv_alpha={lokr_alpha}\" "
+        all_args += f"\"algo=lokr\" "
     return all_args
 
 
@@ -694,7 +725,7 @@ def RUN():
             commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
 
         if gui.get_value("use_separate_lr" + suffix):
-            if optimizer_type == "DAdaptation":
+            if optimizer_type == "DAdaptation" or "DAdaptAdam":
                 commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
                 # commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
                 commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
@@ -776,9 +807,9 @@ def RUN():
 
         if gui.get_value("scale_weight_normals" + suffix):
             scale_weight_normals = gui.get_value('scale_weight_normals' + suffix)
-            commands += f" --scale_weight_norms={scale_weight_normals}"
+            commands += f" --scale_weight_norms={scale_weight_normals}"             # не работает с LoKR
 
-        if gui.get_value('LoCON' + suffix) or gui.get_value('LoHA' + suffix) or gui.get_value('DyLoRA' + suffix):
+        if gui.get_value('LoCON' + suffix) or gui.get_value('LoHA' + suffix) or gui.get_value('DyLoRA' + suffix) or gui.get_value('LoKR' + suffix):
             commands += network_module(suffix)
             additional_network_arguments = additional_network_args(suffix)
             if additional_network_arguments:
@@ -833,6 +864,8 @@ def add_lora_tab():
                                      tag=append_instance_number("visibility_handler_loha"))
         gui.add_item_visible_handler(callback=dylora,
                                      tag=append_instance_number("visibility_handler_dylora"))
+        gui.add_item_visible_handler(callback=lokr,
+                                     tag=append_instance_number("visibility_handler_lokr"))
         gui.add_item_visible_handler(callback=offset_noise,
                                      tag=append_instance_number("visibility_handler_offset_noise"))
 
@@ -875,8 +908,8 @@ def add_lora_tab():
                                      show = True, default_value=False, callback=sd_xl)
                     gui.add_checkbox(tag=append_instance_number("unet_only_sdxl"),
                                      label="Train UNet only", default_value=False)
-                    gui.bind_item_handler_registry(append_instance_number("sdxl"),
-                                                   append_instance_number("handler_checkbox"))
+                    # gui.bind_item_handler_registry(append_instance_number("sdxl"),
+                    #                                append_instance_number("handler_checkbox"))        # Какой то баг посел добавления локра с кликабельностью кнопок из меню "Пути"
 
                 # vae checkbox
                 gui.add_checkbox(tag = append_instance_number("use_vae"), label = "Использовать VAE",
@@ -1025,7 +1058,7 @@ def add_lora_tab():
                     with gui.group(horizontal=True, tag = append_instance_number("_optimizer_type")):
                         gui.add_text("Optimizer type")
                         gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "Lion8bit", "SGDNesterov", "SGDNesterov8bit",   #https://github.com/lucidrains/lion-pytorch     #https://github.com/kohya-ss/sd-scripts/releases/tag/v0.6.4 8-битная версия подъехала
-                                       "DAdaptation", "AdaFactor", "Prodigy"], tag=append_instance_number("optimizer_type"),        #https://github.com/kohya-ss/sd-scripts/pull/585
+                                       "DAdaptation", "DAdaptAdam", "AdaFactor", "Prodigy"], tag=append_instance_number("optimizer_type"),        #https://github.com/kohya-ss/sd-scripts/pull/585
                                       default_value="AdamW8bit", width=-1)
 
                     with gui.group(horizontal=True):
@@ -1262,6 +1295,21 @@ def add_lora_tab():
                     gui.add_text("DyLoRA unit value")
                     gui.add_input_text(tag=append_instance_number("dylora_unit_string"),
                                        hint="4",
+                                       width=-1)
+
+                gui.add_checkbox(tag=append_instance_number("LoKR"), label="LoKR",
+                                 callback=lokr, default_value=False)
+
+                with gui.group(tag=append_instance_number("lokr_dim"), horizontal=True, show=False):
+                    gui.add_text("LoKR dim")
+                    gui.add_input_text(tag=append_instance_number("lokr_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("lokr_alpha"), horizontal=True, show=False):
+                    gui.add_text("LoKR alpha")
+                    gui.add_input_text(tag=append_instance_number("lokr_alpha_string"),
+                                       hint="1",
                                        width=-1)
             if calculate_lora_tab_count() > 1:
                 pass
