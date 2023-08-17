@@ -3,7 +3,7 @@ import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
 
-current_version = "0.26"
+current_version = "0.27"
 default_script = "ltg_default.ini"
 app_width = 1000
 app_height = 750
@@ -27,7 +27,8 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
                  "LoKR", "lokr_dim", "lokr_dim_string", "lokr_alpha", "lokr_alpha_string",
                  "min_snr_gamma", "_offset_noise", "offset_noise", "scale_weight_normals",
-                 "_noise_amount", "noise_amount", "_noise_discount", "noise_discount", "noise_iterations", "_noise_iterations"
+                 "_noise_amount", "noise_amount", "_noise_discount", "noise_discount", "noise_iterations", "_noise_iterations",
+                 "cache_latents", "cache_latents_to_disk", "network_dropout",
                  "additional_parameters"]
 
 
@@ -492,6 +493,15 @@ def custom_log_prefix(caller):
         gui.set_value("log_prefix" + suffix, "")
 
 
+def cache_latents(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("cache_latents" + suffix):
+        gui.show_item("cache_latents_to_disk" + suffix)
+    else:
+        gui.hide_item("cache_latents_to_disk" + suffix)
+        gui.set_value("cache_latents_to_disk" + suffix, False)
+
+
 def scheduler(caller):
     suffix = append_caller_instance(caller)
     if not gui.get_value("lr_scheduler" + suffix) == "constant":
@@ -686,7 +696,6 @@ def RUN():
                     f" --train_batch_size={gui.get_value('train_batch_size' + suffix)}" \
                     f" --resolution=\"{gui.get_value('resolution' + suffix)}\"" \
                     f" --network_dim={gui.get_value('network_dim' + suffix)}" \
-                    f" --keep_tokens={gui.get_value('keep_tokens' + suffix)}" \
                     f" --gradient_accumulation_steps={gui.get_value('gradient_accumulation_steps' + suffix)}" \
                     f" --max_data_loader_n_workers={gui.get_value('max_data_loader_n_workers' + suffix)}" \
                     f" --save_precision={gui.get_value('save_precision' + suffix)}" \
@@ -817,6 +826,19 @@ def RUN():
         else:
             commands += f" --network_module=networks.lora"
 
+        if gui.get_value('keep_tokens' + suffix):
+            keep_tokens_amount = gui.get_value('keep_tokens' + suffix)
+            commands += f" --keep_tokens={keep_tokens_amount}"
+
+        if gui.get_value('cache_latents' + suffix):
+            commands += f" --cache_latents"
+            if gui.get_value('cache_latents_to_disk' + suffix):
+                commands += f" --cache_latents_to_disk"
+
+        if gui.get_value('network_dropout' + suffix):
+            network_dropout = gui.get_value('network_dropout' + suffix)
+            commands += f" --network_dropout={network_dropout}"
+
 
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
@@ -847,6 +869,7 @@ def add_lora_tab():
     with gui.item_handler_registry(tag = append_instance_number("handler_checkbox")):
         gui.add_item_visible_handler(callback = sd_2x, tag = append_instance_number("visibility_handler_sd_2x"))
         gui.add_item_visible_handler(callback = sd_xl, tag = append_instance_number("visibility_handler_sdxl"))
+        gui.add_item_visible_handler(callback = cache_latents, tag=append_instance_number("visibility_handler_cache_latents"))
         gui.add_item_visible_handler(callback = use_vae, tag = append_instance_number("visibility_handler_use_vae"))
         gui.add_item_visible_handler(callback = reg_images,
                                      tag = append_instance_number("visibility_handler_reg_images"))
@@ -1155,7 +1178,7 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("Защитить от перемешивания первые")
                         gui.add_input_text(tag = append_instance_number("keep_tokens"),
-                                           default_value = '1', width = 120, decimal = True)
+                                           width = 120, decimal = True)
                         gui.add_text("токенов")
 
                     with gui.group(horizontal = True):
@@ -1171,7 +1194,7 @@ def add_lora_tab():
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
                                                        "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1536 "
-                                                       "--xformers --save_model_as=safetensors --cache_latents --cache_latents_to_disk --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
+                                                       "--xformers --save_model_as=safetensors --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
                     gui.add_text("gradient_checkpointing")
@@ -1212,6 +1235,14 @@ def add_lora_tab():
                     gui.add_checkbox(tag = append_instance_number("use_custom_log_prefix"), default_value = False,
                                      callback = custom_log_prefix)
 
+                with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
+                               show = False):
+                    gui.add_text("log_prefix")
+                    gui.add_input_text(tag = append_instance_number("log_prefix"),
+                                       default_value = "", width = -1)
+                    gui.bind_item_handler_registry(append_instance_number("use_custom_log_prefix"),
+                                                   append_instance_number("handler_checkbox"))
+
                 with gui.group(horizontal = True):
                     gui.add_text("min_snr_gamma")
                     gui.add_input_text(tag = append_instance_number("min_snr_gamma"),
@@ -1237,13 +1268,17 @@ def add_lora_tab():
                     gui.add_text("Pyramid discount")
                     gui.add_input_text(tag=append_instance_number("noise_discount"), width=-1)
 
-                with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
-                               show = False):
-                    gui.add_text("log_prefix")
-                    gui.add_input_text(tag = append_instance_number("log_prefix"),
-                                       default_value = "", width = -1)
-                    gui.bind_item_handler_registry(append_instance_number("use_custom_log_prefix"),
-                                                   append_instance_number("handler_checkbox"))
+                with gui.group(horizontal = True):
+                    gui.add_text("network dropout")
+                    gui.add_input_text(tag = append_instance_number("network_dropout"),
+                                       hint='0.1', width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_checkbox(tag=append_instance_number("cache_latents"), label = "Cache latents",
+                                     default_value=False, callback=cache_latents)
+                    gui.add_checkbox(tag=append_instance_number("cache_latents_to_disk"),
+                                     label="Cache latents to disk", default_value=False)
+
             with gui.tab(label="LyCORIS"):
 
                 gui.add_checkbox(tag=append_instance_number("LoCON"), label="LoCON",
