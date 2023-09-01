@@ -734,7 +734,7 @@ def RUN():
             commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
 
         if gui.get_value("use_separate_lr" + suffix):
-            if optimizer_type == "DAdaptation" or "DAdaptAdam":
+            if optimizer_type == "DAdaptation" or optimizer_type == "DAdaptAdam":           # pizdos fix obsera
                 commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
                 # commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
                 commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
@@ -1049,8 +1049,7 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("Использовать раздельные скорости обучения")
                         gui.add_checkbox(tag = append_instance_number("use_separate_lr"), default_value = False)
-
-                    gui.bind_item_handler_registry(append_instance_number("use_separate_lr"),
+                        gui.bind_item_handler_registry(append_instance_number("use_separate_lr"),
                                                    append_instance_number("handler_checkbox"))
 
                     with gui.group(horizontal = True, tag = append_instance_number("group_main_lr")):
